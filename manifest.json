@@ -1,6 +1,6 @@
 {
-  "name": "Zoom Tally Counter",
-  "short_name": "Zoom Tally",
+  "name": "Zoom Attendance Counter",
+  "short_name": "Zoom Counter",
   "start_url": "./index.html",
   "display": "standalone",
   "orientation": "portrait",
