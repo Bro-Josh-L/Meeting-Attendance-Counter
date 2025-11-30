@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Zoom Attendance Tally</title>
+    <title>Zoom Attendance Counter</title>
     <!-- Link to the PWA Manifest -->
     <link rel="manifest" href="./manifest.json">
     <!-- Load Tailwind CSS -->
@@ -87,7 +87,7 @@
          */
         const copyToClipboard = () => {
             const total = getValue('grand-total');
-            const message = `There are ${total} people online.`;
+            const message = `There are ${total} people on Zoom.`;
 
             // Use the older document.execCommand('copy') for better iframe compatibility
             const tempInput = document.createElement('textarea');
@@ -263,7 +263,7 @@
 
     <div class="max-w-xl mx-auto bg-white p-6 md:p-10 rounded-xl shadow-2xl border border-gray-200">
         <h1 class="text-3xl md:text-4xl font-extrabold text-indigo-700 mb-6 text-center">
-            Zoom Attendance Tally
+            Zoom Attendance Counter
         </h1>
         <p class="text-center text-gray-500 mb-8">
             Tap the arrows to increment or decrement the number of responses for each option.
