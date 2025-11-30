@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Zoom Attendance Tally</title>
+    <!-- Link to the PWA Manifest -->
+    <link rel="manifest" href="./manifest.json">
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Custom styles for the new large, round number input buttons */
+        .number-control-btn-round {
+            /* Large, round touch targets (TIGHTER FIT) */
+            @apply flex justify-center items-center w-10 h-10 md:w-12 md:h-12 rounded-full text-white transition duration-150 ease-in-out;
+            @apply shadow-xl hover:shadow-2xl focus:outline-none focus:ring-4;
+            user-select: none; /* Prevent text selection on click/touch */
+        }
+        
+        /* New style for the display element (Replaces the Input Field) */
+        .display-value-tight {
+            /* TIGHTENING WIDTH to ensure room for buttons */
+            @apply text-center text-3xl md:text-4xl font-mono text-gray-900 bg-white border-2 border-indigo-400 rounded-lg;
+            @apply w-12 md:w-16 h-12 md:h-14 p-0.5; 
+            @apply flex items-center justify-center; /* Center text vertically and horizontally */
+        }
+
+        /* Styles for the Clipboard Message Indicator */
+        #copy-feedback {
+            @apply fixed bottom-5 left-1/2 transform -translate-x-1/2 p-3 px-6 rounded-full shadow-2xl z-50 transition-opacity duration-300 ease-out hidden;
+        }
+    </style>
+    <script>
+        // Initialize the input data structure
+        const INPUT_CONFIG = [
+            { id: 'count-0', label: '0', multiplier: 0, isPoll: true },
+            { id: 'count-1', label: '1', multiplier: 1, isPoll: true },
+            { id: 'count-2', label: '2', multiplier: 2, isPoll: true },
+            { id: 'count-3', label: '3', multiplier: 3, isPoll: true },
+            { id: 'count-4', label: '4', multiplier: 4, isPoll: true },
+            { id: 'count-5', label: '5', multiplier: 5, isPoll: true },
+            { id: 'count-6', label: '6', multiplier: 6, isPoll: true },
+            { id: 'count-7', label: '7', multiplier: 7, isPoll: true },
+            { id: 'count-8', label: '8', multiplier: 8, isPoll: true },
+            { id: 'count-phone', label: 'Phone', multiplier: 1, isPoll: false }
+        ];
+
+        /**
+         * Safely gets the integer value of a display element (div), defaulting to 0.
+         * @param {string} id - The ID of the display element.
+         * @returns {number} The integer value.
+         */
+        const getValue = (id) => {
+            const el = document.getElementById(id);
+            if (!el) return 0;
+            // Reading textContent instead of input value
+            const val = parseInt(el.textContent, 10); 
+            return isNaN(val) || val < 0 ? 0 : val;
+        };
+
+        /**
+         * Updates the calculated totals (Participants and Grand Total).
+         */
+        const updateTotals = () => {
+            let totalValue = 0; // The complex calculated total: (V_i * i) + V_Phone
+            let totalParticipants = 0; // Sum of all poll entries (V_0 through V_8)
+
+            INPUT_CONFIG.forEach(config => {
+                const value = getValue(config.id);
+
+                // 1. Calculate Participants (V_0 through V_8 only)
+                if (config.isPoll) {
+                    totalParticipants += value;
+                }
+
+                // 2. Calculate Total Value: (V_i * i) + V_Phone
+                totalValue += value * config.multiplier;
+            });
+
+            // Update DOM
+            document.getElementById('total-participants').textContent = totalParticipants;
+            document.getElementById('grand-total').textContent = totalValue;
+        };
+
+        /**
+         * Copies the generated attendance message to the clipboard.
+         */
+        const copyToClipboard = () => {
+            const total = getValue('grand-total');
+            const message = `There are ${total} people online.`;
+
+            // Use the older document.execCommand('copy') for better iframe compatibility
+            const tempInput = document.createElement('textarea');
+            tempInput.value = message;
+            // Hide the textarea off-screen
+            tempInput.style.position = 'fixed';
+            tempInput.style.opacity = '0';
+            document.body.appendChild(tempInput);
+            tempInput.select();
+            
+            try {
+                // This is the function that actually copies the text
+                document.execCommand('copy'); 
+                showFeedback('Copied attendance message to clipboard!');
+            } catch (err) {
+                console.error('Failed to copy text', err);
+                showFeedback('Copy failed. Check console for details.');
+            }
+            
+            document.body.removeChild(tempInput);
+        };
+
+        /**
+         * Displays temporary confirmation feedback.
+         * @param {string} text - The message to display.
+         */
+        let feedbackTimeout;
+        const showFeedback = (text) => {
+            const feedbackEl = document.getElementById('copy-feedback');
+            feedbackEl.textContent = text;
+            feedbackEl.classList.remove('hidden');
+            feedbackEl.style.opacity = '1';
+
+            // Clear any existing timeout
+            if (feedbackTimeout) {
+                clearTimeout(feedbackTimeout);
+            }
+
+            // Hide after 3 seconds
+            feedbackTimeout = setTimeout(() => {
+                feedbackEl.style.opacity = '0';
+                setTimeout(() => {
+                    feedbackEl.classList.add('hidden');
+                }, 300); // Wait for fade-out transition
+            }, 3000);
+        };
+
+        /**
+         * Increments or decrements a display element's value and updates totals.
+         * @param {string} id - The ID of the display element.
+         * @param {number} delta - The amount to change the value by (1 or -1).
+         */
+        const adjustValue = (id, delta) => {
+            const display = document.getElementById(id);
+            if (!display) return;
+
+            let currentValue = getValue(id);
+            currentValue += delta;
+
+            // Prevent negative numbers
+            if (currentValue < 0) {
+                currentValue = 0;
+            }
+
+            // Update textContent instead of input value
+            display.textContent = currentValue; 
+            updateTotals();
+        };
+
+        /**
+         * Clears all input fields and resets the totals.
+         */
+        const clearAll = () => {
+            INPUT_CONFIG.forEach(config => {
+                const display = document.getElementById(config.id);
+                if (display) {
+                    // Reset to '0' since it's a display div
+                    display.textContent = '0'; 
+                }
+            });
+            updateTotals(); 
+        };
+
+        /**
+         * Dynamically creates the HTML structure for a single input group with display-only value.
+         * @param {object} config - The configuration object for the input.
+         * @returns {string} The HTML string.
+         */
+        const createInputGroupHTML = (config) => `
+            <div class="flex flex-col items-center p-3 bg-gray-100 rounded-xl shadow-inner space-y-2 border border-gray-200">
+                
+                <!-- Label (Clear above the field) -->
+                <label for="${config.id}" class="text-xl md:text-2xl font-bold text-gray-800 tracking-wider">
+                    ${config.label}
+                </label>
+
+                <!-- Control Group (Down | Display | Up) -->
+                <div class="flex items-center space-x-2 md:space-x-4">
+                    <!-- Decrement Button (Down Arrow SVG) -->
+                    <button type="button" onclick="adjustValue('${config.id}', -1)"
+                        class="number-control-btn-round bg-red-500 hover:bg-red-600 focus:ring-red-300">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M19 9l-7 7-7-7"></path></svg>
+                    </button>
+                    
+                    <!-- Display Value (The current count) -->
+                    <div id="${config.id}" class="display-value-tight">
+                        0
+                    </div>
+                    
+                    <!-- Increment Button (Up Arrow SVG) -->
+                    <button type="button" onclick="adjustValue('${config.id}', 1)"
+                        class="number-control-btn-round bg-green-500 hover:bg-green-600 focus:ring-green-300">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 15l7-7 7 7"></path></svg>
+                    </button>
+                </div>
+            </div>
+        `;
+
+        /**
+         * Renders all input groups into two columns (0-4 and 5-Phone).
+         */
+        const renderInputs = () => {
+            const container = document.getElementById('input-grid-wrapper');
+            if (container) {
+                // Split configuration into two columns (5 items each)
+                const column1Config = INPUT_CONFIG.slice(0, 5); // 0, 1, 2, 3, 4
+                const column2Config = INPUT_CONFIG.slice(5);    // 5, 6, 7, 8, Phone
+
+                const column1HTML = column1Config.map(createInputGroupHTML).join('');
+                const column2HTML = column2Config.map(createInputGroupHTML).join('');
+                
+                // Manually generate the two column structure inside the grid container
+                container.innerHTML = `
+                    <div class="flex flex-col space-y-4 md:space-y-6">
+                        ${column1HTML}
+                    </div>
+                    <div class="flex flex-col space-y-4 md:space-y-6">
+                        ${column2HTML}
+                    </div>
+                `;
+            }
+        };
+
+        // PWA: Service Worker Registration
+        const registerServiceWorker = () => {
+            if ('serviceWorker' in navigator) {
+                window.addEventListener('load', () => {
+                    navigator.serviceWorker.register('./service-worker.js').then(registration => {
+                        console.log('ServiceWorker registration successful with scope: ', registration.scope);
+                    }, error => {
+                        console.log('ServiceWorker registration failed: ', error);
+                    });
+                });
+            }
+        };
+
+        // Initialize application on load
+        window.onload = () => {
+            renderInputs();
+            updateTotals(); // Initial calculation (should be 0)
+
+            // Attach event listener to the clear button
+            document.getElementById('clear-btn').onclick = clearAll;
+            // Attach event listener to the copy button
+            document.getElementById('copy-btn').onclick = copyToClipboard;
+            
+            // PWA: Register the Service Worker
+            registerServiceWorker();
+        };
+    </script>
+</head>
+<body class="bg-gray-100 min-h-screen p-4 md:p-8 font-sans">
+
+    <div class="max-w-xl mx-auto bg-white p-6 md:p-10 rounded-xl shadow-2xl border border-gray-200">
+        <h1 class="text-3xl md:text-4xl font-extrabold text-indigo-700 mb-6 text-center">
+            Zoom Attendance Tally
+        </h1>
+        <p class="text-center text-gray-500 mb-8">
+            Tap the arrows to increment or decrement the number of responses for each option.
+        </p>
+
+        <!-- Input Grid Wrapper (2 columns, now containing two stacked columns) -->
+        <div id="input-grid-wrapper" class="grid grid-cols-2 gap-4 md:gap-6">
+            <!-- Content dynamically inserted by JavaScript as two stacked columns -->
+        </div>
+
+        <!-- Separator -->
+        <div class="my-8 border-t-2 border-dashed border-gray-300"></div>
+
+        <!-- Totals and Action Row -->
+        <div class="grid grid-cols-2 gap-4 md:gap-6 items-end">
+
+            <!-- Participants Total (Bottom of Column 1 equivalent) -->
+            <div class="flex flex-col items-start space-y-1 p-3 bg-blue-50 rounded-lg shadow-md border border-blue-200">
+                <span class="text-sm font-medium text-blue-700">Participants (Excl. Phone)</span>
+                <span id="total-participants" class="text-3xl font-bold text-blue-900 font-mono">0</span>
+            </div>
+
+            <!-- Clear Button (Bottom of Column 2 equivalent) -->
+            <button id="clear-btn"
+                    class="h-14 bg-gray-200 hover:bg-gray-300 text-gray-700 font-bold py-3 px-4 rounded-lg shadow-md transition duration-150 ease-in-out">
+                Clear All
+            </button>
+        </div>
+
+        <!-- Grand Total (Centered across both columns) -->
+        <div class="mt-6 p-4 md:p-6 bg-indigo-600 rounded-xl shadow-xl text-center">
+            <span class="text-lg font-semibold text-indigo-200 block">Calculated Attendance Total</span>
+            <span id="grand-total" class="text-5xl md:text-7xl font-extrabold text-white font-mono leading-none">0</span>
+        </div>
+        
+        <!-- Copy Button (Below Total) -->
+        <button id="copy-btn" 
+           class="mt-4 flex items-center justify-center space-x-2 w-full py-3 bg-green-500 hover:bg-green-600 text-white font-bold rounded-lg shadow-lg transition duration-150 ease-in-out transform hover:scale-[1.01] focus:ring-4 focus:ring-green-300">
+            <!-- Icon for Copy/Clipboard -->
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5h6m-3 7v6m0 0l3-3m-3 3l-3-3"></path></svg>
+            <span>Copy Attendance Message</span>
+        </button>
+
+        <p class="mt-6 text-xs text-gray-400 text-center">
+            Calculation: (Responses * Label Value) + Phone Entries
+        </p>
+
+    </div>
+
+    <!-- Floating Feedback Message -->
+    <div id="copy-feedback" class="bg-gray-800 text-white text-sm font-semibold opacity-0">
+        Copied attendance message to clipboard!
+    </div>
+</body>
+</html>
+
